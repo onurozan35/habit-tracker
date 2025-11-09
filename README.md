@@ -49,7 +49,7 @@ cd habit-tracker
 
 2. Start the application with Docker Compose
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 3. Open your browser and navigate to `http://localhost:8080`
@@ -59,7 +59,7 @@ That's it! Your habit tracker is now running locally.
 ### Stopping the Application
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ## Usage
