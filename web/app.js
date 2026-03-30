@@ -31,23 +31,34 @@ class HabitTracker {
         { id: '2year', name: '2 Years', milliseconds: 63072000000 }
     ].sort((a, b) => a.milliseconds - b.milliseconds);
 
+    static CATEGORY_ICONS = {
+        health: '💪',
+        productivity: '⚡',
+        mindfulness: '🧘',
+        finance: '💰',
+        other: '📌'
+    };
+
     constructor() {
         this.habits = [];
         this.currentEditId = null;
         this.currentDeleteId = null;
+        this.activeFilter = 'all';
         this.motivationalMessages = [
-            "You're stronger than you think!",
-            "Every moment is a victory!",
-            "Keep going, you've got this!",
-            "Progress, not perfection!",
-            "You're doing amazing!",
-            "One day at a time!",
-            "Proud of your journey!",
-            "Stay strong, stay focused!",
-            "You're worth it!",
-            "Believe in yourself!"
+            "You're stronger than you think! 💪",
+            "Every moment is a victory! 🏆",
+            "Keep going, you've got this! 🔥",
+            "Progress, not perfection! 📈",
+            "You're doing amazing! ⭐",
+            "One day at a time! 🌅",
+            "Proud of your journey! 🚀",
+            "Stay strong, stay focused! 🎯",
+            "You're worth it! 💎",
+            "Believe in yourself! ✨",
+            "Consistency is key! 🔑",
+            "Small steps, big results! 🏔️"
         ];
-        
+
         this.init();
     }
 
@@ -56,6 +67,7 @@ class HabitTracker {
         this.migrateDataIfNeeded();
         this.bindEvents();
         this.render();
+        this.updateStats();
         this.startStreakUpdater();
     }
 
@@ -85,14 +97,29 @@ class HabitTracker {
             }
         });
 
+        // Category filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.activeFilter = btn.dataset.category;
+                this.render();
+            });
+        });
+
         window.addEventListener('click', (e) => {
             if (e.target.classList.contains('modal')) {
                 this.closeAllModals();
             }
         });
+
+        // Keyboard shortcuts
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') this.closeAllModals();
+        });
     }
 
-    // Storage methods
+    // Storage
     loadFromStorage() {
         const stored = localStorage.getItem('habitTrackerHabits');
         if (stored) {
@@ -104,14 +131,11 @@ class HabitTracker {
         localStorage.setItem('habitTrackerHabits', JSON.stringify(this.habits));
     }
 
-    // Migrate old data to include new fields
     migrateDataIfNeeded() {
         let updated = false;
         this.habits.forEach(habit => {
             if (!habit.currentStreakStart) {
-                // Initialize current streak start
                 if (habit.occurrences.length > 0) {
-                    // Sort occurrences by date descending
                     habit.occurrences.sort((a, b) => new Date(b.date) - new Date(a.date));
                     habit.currentStreakStart = habit.occurrences[0].date;
                 } else {
@@ -123,23 +147,25 @@ class HabitTracker {
                 habit.earnedBadges = [];
                 updated = true;
             }
+            if (!habit.category) {
+                habit.category = 'other';
+                updated = true;
+            }
         });
-        
+
         if (updated) {
-            // Recalculate badges for all habits
-            this.habits.forEach(habit => {
-                this.updateStreakAndBadges(habit);
-            });
+            this.habits.forEach(habit => this.updateStreakAndBadges(habit));
             this.saveToStorage();
         }
     }
 
-    // Habit CRUD operations
-    addHabit(name, startDate) {
+    // CRUD
+    addHabit(name, startDate, category) {
         const habit = {
             id: Date.now().toString(),
             name: name,
             startDate: new Date(startDate).toISOString(),
+            category: category || 'other',
             occurrences: [],
             currentStreakStart: new Date(startDate).toISOString(),
             earnedBadges: [],
@@ -149,28 +175,26 @@ class HabitTracker {
         this.updateStreakAndBadges(habit);
         this.saveToStorage();
         this.render();
+        this.updateStats();
         this.showMotivationalMessage();
     }
 
-    updateHabit(id, name, startDate) {
+    updateHabit(id, name, startDate, category) {
         const habit = this.habits.find(h => h.id === id);
         if (habit) {
             habit.name = name;
+            habit.category = category || habit.category;
             const oldStartDate = habit.startDate;
             habit.startDate = new Date(startDate).toISOString();
-            
-            // Remove occurrences before new start date
-            habit.occurrences = habit.occurrences.filter(o => 
+            habit.occurrences = habit.occurrences.filter(o =>
                 new Date(o.date) >= new Date(habit.startDate)
             );
-            
-            // Recalculate streak and badges if start date changed or occurrences were removed
             if (oldStartDate !== habit.startDate || habit.occurrences.length === 0) {
                 this.updateStreakAndBadges(habit);
             }
-            
             this.saveToStorage();
             this.render();
+            this.updateStats();
         }
     }
 
@@ -178,6 +202,7 @@ class HabitTracker {
         this.habits = this.habits.filter(h => h.id !== id);
         this.saveToStorage();
         this.render();
+        this.updateStats();
     }
 
     addOccurrence(habitId, date, notes) {
@@ -190,11 +215,10 @@ class HabitTracker {
             };
             habit.occurrences.push(occurrence);
             habit.occurrences.sort((a, b) => new Date(b.date) - new Date(a.date));
-            
             this.updateStreakAndBadges(habit);
-            
             this.saveToStorage();
             this.render();
+            this.updateStats();
         }
     }
 
@@ -205,46 +229,36 @@ class HabitTracker {
             this.updateStreakAndBadges(habit);
             this.saveToStorage();
             this.render();
-            this.updateOccurrencesList(habitId); // Update the modal list
+            this.updateStats();
+            this.updateOccurrencesList(habitId);
         }
     }
 
-    // Badge and Streak Methods
+    // Badge and Streak
     updateStreakAndBadges(habit) {
         const previousStreakStart = habit.currentStreakStart;
-        
-        // determine current streak start
         if (habit.occurrences.length === 0) {
             habit.currentStreakStart = habit.startDate;
         } else {
-            // Most recent occurrence is the start of current streak
-            const sortedOccurrences = [...habit.occurrences].sort((a, b) => 
+            const sortedOccurrences = [...habit.occurrences].sort((a, b) =>
                 new Date(b.date) - new Date(a.date)
             );
             habit.currentStreakStart = sortedOccurrences[0].date;
         }
-        
-        // If streak was reset (moved forward in time), clear badges
         if (previousStreakStart && new Date(habit.currentStreakStart) > new Date(previousStreakStart)) {
             habit.earnedBadges = [];
         }
-        
         habit.earnedBadges = this.calculateEarnedBadges(habit);
     }
 
     calculateEarnedBadges(habit) {
         const now = new Date();
-        let currentStreakStart;
-        
-        if (habit.occurrences.length === 0) {
-            currentStreakStart = new Date(habit.startDate);
-        } else {
-            currentStreakStart = new Date(habit.occurrences[0].date);
-        }
-        
+        const currentStreakStart = habit.occurrences.length === 0
+            ? new Date(habit.startDate)
+            : new Date(habit.occurrences[0].date);
         const currentStreakDuration = now - currentStreakStart;
         const earnedBadges = [];
-        
+
         for (const badge of HabitTracker.BADGE_DEFINITIONS) {
             if (currentStreakDuration >= badge.milliseconds) {
                 earnedBadges.push({
@@ -254,10 +268,7 @@ class HabitTracker {
                 });
             }
         }
-        
-        // Sort by earned time descending (most recent first)
         earnedBadges.sort((a, b) => new Date(b.earnedAt) - new Date(a.earnedAt));
-        
         return earnedBadges;
     }
 
@@ -265,23 +276,18 @@ class HabitTracker {
         const now = new Date();
         const streakStart = new Date(habit.currentStreakStart);
         const currentStreakDuration = now - streakStart;
-        
-        // Find the next badge that hasn't been earned yet
+
         for (const badge of HabitTracker.BADGE_DEFINITIONS) {
             if (currentStreakDuration < badge.milliseconds) {
                 const timeRemaining = badge.milliseconds - currentStreakDuration;
-                const earnTime = new Date(now.getTime() + timeRemaining);
-                
                 return {
                     name: badge.name,
                     timeRemaining: timeRemaining,
-                    earnTime: earnTime,
+                    progress: (currentStreakDuration / badge.milliseconds) * 100,
                     formattedTimeRemaining: this.formatDuration(timeRemaining)
                 };
             }
         }
-        
-        // All badges earned
         return null;
     }
 
@@ -289,57 +295,48 @@ class HabitTracker {
         return habit.earnedBadges.slice(0, count);
     }
 
-    formatBadgeDisplay(badge, size = 32) {
+    formatBadgeDisplay(badge, size = 24) {
         return `<img src="images/badge_${badge.id}_image.png" width="${size}" height="${size}" alt="${badge.id}" class="badge-icon" onerror="this.outerHTML='🔥'"> ${badge.name}`;
     }
 
     calculateCurrentStreak(habit) {
         const now = new Date();
-        
-        if (habit.occurrences.length === 0) {
-            const streakStart = new Date(habit.startDate);
-            return this.formatDuration(now - streakStart);
-        }
-        
-        const mostRecentOccurrence = new Date(habit.occurrences[0].date);
-        
-        return this.formatDuration(now - mostRecentOccurrence);
+        const start = habit.occurrences.length === 0
+            ? new Date(habit.startDate)
+            : new Date(habit.occurrences[0].date);
+        return now - start;
+    }
+
+    calculateCurrentStreakFormatted(habit) {
+        return this.formatDuration(this.calculateCurrentStreak(habit));
     }
 
     calculateLongestStreak(habit) {
         if (habit.occurrences.length === 0) {
-            // No occurrences, longest streak is current streak
             return this.calculateCurrentStreak(habit);
         }
-        
         const now = new Date();
         const startDate = new Date(habit.startDate);
-        const sortedOccurrences = [...habit.occurrences].sort((a, b) => 
+        const sortedOccurrences = [...habit.occurrences].sort((a, b) =>
             new Date(a.date) - new Date(b.date)
         );
-        
         let longestStreak = 0;
         let previousDate = startDate;
-        
-        // Check streaks between occurrences
         for (const occurrence of sortedOccurrences) {
             const occurrenceDate = new Date(occurrence.date);
             const streakLength = occurrenceDate - previousDate;
-            
-            if (streakLength > longestStreak) {
-                longestStreak = streakLength;
-            }
-            
+            if (streakLength > longestStreak) longestStreak = streakLength;
             previousDate = occurrenceDate;
         }
-        
-        // Check current streak (from last occurrence to now)
         const currentStreakLength = now - previousDate;
-        if (currentStreakLength > longestStreak) {
-            longestStreak = currentStreakLength;
-        }
-        
-        return this.formatDuration(longestStreak);
+        if (currentStreakLength > longestStreak) longestStreak = currentStreakLength;
+        return longestStreak;
+    }
+
+    getDayCount(habit) {
+        const now = new Date();
+        const start = new Date(habit.startDate);
+        return Math.floor((now - start) / 86400000);
     }
 
     formatDuration(milliseconds) {
@@ -347,49 +344,94 @@ class HabitTracker {
         const minutes = Math.floor(seconds / 60);
         const hours = Math.floor(minutes / 60);
         const days = Math.floor(hours / 24);
-        
         const displayHours = hours % 24;
         const displayMinutes = minutes % 60;
-        
+
         if (days > 0) {
-            return `${days} day${days !== 1 ? 's' : ''}, ${displayHours} hr${displayHours !== 1 ? 's' : ''}, ${displayMinutes} min${displayMinutes !== 1 ? 's' : ''}`;
+            return `${days}d ${displayHours}h ${displayMinutes}m`;
         } else if (hours > 0) {
-            return `${displayHours} hr${displayHours !== 1 ? 's' : ''}, ${displayMinutes} min${displayMinutes !== 1 ? 's' : ''}`;
+            return `${displayHours}h ${displayMinutes}m`;
         } else {
-            return `${displayMinutes} min${displayMinutes !== 1 ? 's' : ''}`;
+            return `${displayMinutes}m`;
         }
     }
 
-    // UI Methods
+    formatDurationShort(milliseconds) {
+        const days = Math.floor(milliseconds / 86400000);
+        if (days > 0) return `${days}d`;
+        const hours = Math.floor(milliseconds / 3600000);
+        if (hours > 0) return `${hours}h`;
+        return `${Math.floor(milliseconds / 60000)}m`;
+    }
+
+    // Stats Dashboard
+    updateStats() {
+        document.getElementById('totalHabits').textContent = this.habits.length;
+
+        let bestStreak = 0;
+        let totalBadges = 0;
+        let totalOccurrences = 0;
+
+        this.habits.forEach(habit => {
+            const longest = this.calculateLongestStreak(habit);
+            if (longest > bestStreak) bestStreak = longest;
+            totalBadges += habit.earnedBadges.length;
+            totalOccurrences += habit.occurrences.length;
+        });
+
+        document.getElementById('totalStreak').textContent = bestStreak > 0
+            ? this.formatDurationShort(bestStreak) : '0d';
+        document.getElementById('totalBadges').textContent = totalBadges;
+        document.getElementById('totalOccurrences').textContent = totalOccurrences;
+    }
+
+    // Rendering
     render() {
         const habitsList = document.getElementById('habitsList');
-        
-        if (this.habits.length === 0) {
+        const filteredHabits = this.activeFilter === 'all'
+            ? this.habits
+            : this.habits.filter(h => h.category === this.activeFilter);
+
+        if (filteredHabits.length === 0) {
+            const message = this.habits.length === 0
+                ? 'No habits tracked yet'
+                : 'No habits in this category';
+            const sub = this.habits.length === 0
+                ? 'Click the button above to start tracking your first habit!'
+                : 'Try a different filter or add a new habit.';
             habitsList.innerHTML = `
                 <div class="empty-state">
-                    <h3>No habits tracked yet</h3>
-                    <p>Click the button above to start tracking your first habit!</p>
+                    <div class="empty-state-icon">🎯</div>
+                    <h3>${message}</h3>
+                    <p>${sub}</p>
                 </div>
             `;
             return;
         }
-        
-        habitsList.innerHTML = this.habits.map(habit => this.renderHabitCard(habit)).join('');
+
+        habitsList.innerHTML = filteredHabits.map(habit => this.renderHabitCard(habit)).join('');
     }
 
     renderHabitCard(habit) {
         const latestBadges = this.getLatestBadges(habit, 3);
         const nextBadge = this.getNextBadge(habit);
-        
+        const categoryIcon = HabitTracker.CATEGORY_ICONS[habit.category] || '📌';
+        const dayCount = this.getDayCount(habit);
+
+        const progressPercent = nextBadge ? Math.min(nextBadge.progress, 100) : 100;
+        const progressLabel = nextBadge
+            ? `${Math.round(progressPercent)}% to ${nextBadge.name}`
+            : 'All badges earned!';
+
         const badgesHtml = latestBadges.length > 0 ? `
             <div class="badge-display">
                 <div class="badge-items">
-                    ${latestBadges.map(badge => 
+                    ${latestBadges.map(badge =>
                         `<span class="badge-item">${this.formatBadgeDisplay(badge)}</span>`
-                    ).join(', ')}
+                    ).join('')}
                 </div>
-                ${habit.earnedBadges.length > 3 ? 
-                    `<button class="view-all-badges" onclick="tracker.openBadgesModal('${habit.id}')">View All Badges</button>` 
+                ${habit.earnedBadges.length > 3 ?
+                    `<button class="view-all-badges" onclick="tracker.openBadgesModal('${habit.id}')">View all ${habit.earnedBadges.length} badges</button>`
                     : ''
                 }
             </div>
@@ -397,43 +439,52 @@ class HabitTracker {
 
         const nextBadgeHtml = nextBadge ? `
             <div class="next-badge">
-                <span class="next-badge-label">Next Badge:</span>
+                <span class="next-badge-label">Next:</span>
                 <span class="next-badge-name">⭐ ${nextBadge.name}</span>
                 <span class="next-badge-time">in ${nextBadge.formattedTimeRemaining}</span>
             </div>
         ` : `
             <div class="next-badge all-earned">
-                <span class="next-badge-label">🏆 All badges earned! Amazing!</span>
+                <span class="next-badge-label">🏆 All badges earned!</span>
             </div>
         `;
-        
+
         return `
-            <div class="habit-card" data-id="${habit.id}">
+            <div class="habit-card" data-id="${habit.id}" data-category="${habit.category}">
                 <div class="habit-header">
-                    <h3 class="habit-name">${this.escapeHtml(habit.name)}</h3>
+                    <div class="habit-name-section">
+                        <span class="habit-category-icon">${categoryIcon}</span>
+                        <div>
+                            <h3 class="habit-name">${this.escapeHtml(habit.name)}</h3>
+                            <div class="habit-days-count">Day ${dayCount}</div>
+                        </div>
+                    </div>
                     <div class="habit-actions">
-                        <button class="icon-btn add-occurrence" title="Add Occurrence" onclick="tracker.openOccurrenceModal('${habit.id}')">
-                            +
-                        </button>
-                        <button class="icon-btn edit" title="Edit Habit" onclick="tracker.openHabitModal('${habit.id}')">
-                            ✏️
-                        </button>
-                        <button class="icon-btn delete" title="Delete Habit" onclick="tracker.openDeleteModal('${habit.id}')">
-                            🗑️
-                        </button>
+                        <button class="icon-btn add-occurrence" title="Log Occurrence" onclick="tracker.openOccurrenceModal('${habit.id}')">+</button>
+                        <button class="icon-btn edit" title="Edit" onclick="tracker.openHabitModal('${habit.id}')">✏️</button>
+                        <button class="icon-btn delete" title="Delete" onclick="tracker.openDeleteModal('${habit.id}')">🗑️</button>
+                    </div>
+                </div>
+                <div class="progress-section">
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" style="width: ${progressPercent}%"></div>
+                    </div>
+                    <div class="progress-label">
+                        <span>${progressLabel}</span>
+                        <span>${habit.earnedBadges.length} badges</span>
                     </div>
                 </div>
                 <div class="streak-info">
                     <div class="streak-item">
-                        <div class="streak-label">Current Streak</div>
-                        <div class="streak-value">${this.calculateCurrentStreak(habit)}</div>
+                        <div class="streak-label">Current</div>
+                        <div class="streak-value">${this.calculateCurrentStreakFormatted(habit)}</div>
                     </div>
                     <div class="streak-item">
-                        <div class="streak-label">Longest Streak</div>
-                        <div class="streak-value">${this.calculateLongestStreak(habit)}</div>
+                        <div class="streak-label">Longest</div>
+                        <div class="streak-value">${this.formatDuration(this.calculateLongestStreak(habit))}</div>
                     </div>
                     <div class="streak-item">
-                        <div class="streak-label">Occurrences</div>
+                        <div class="streak-label">Logs</div>
                         <div class="streak-value occurrences">${habit.occurrences.length}</div>
                     </div>
                 </div>
@@ -443,18 +494,19 @@ class HabitTracker {
         `;
     }
 
-    // Modal Methods
+    // Modals
     openHabitModal(habitId = null) {
         const modal = document.getElementById('habitModal');
         const form = document.getElementById('habitForm');
         const title = document.getElementById('modalTitle');
-        
+
         if (habitId) {
             const habit = this.habits.find(h => h.id === habitId);
             if (habit) {
                 this.currentEditId = habitId;
                 title.textContent = 'Edit Habit';
                 document.getElementById('habitName').value = habit.name;
+                document.getElementById('habitCategory').value = habit.category || 'other';
                 document.getElementById('startDate').value = this.formatDateTimeLocal(new Date(habit.startDate));
             }
         } else {
@@ -463,7 +515,7 @@ class HabitTracker {
             form.reset();
             document.getElementById('startDate').value = this.formatDateTimeLocal(new Date());
         }
-        
+
         modal.classList.add('active');
     }
 
@@ -476,17 +528,12 @@ class HabitTracker {
     openOccurrenceModal(habitId) {
         const habit = this.habits.find(h => h.id === habitId);
         if (!habit) return;
-        
         document.getElementById('occurrenceHabitId').value = habitId;
         document.getElementById('occurrenceDate').value = this.formatDateTimeLocal(new Date());
-        
-        // Set min and max dates
         const dateInput = document.getElementById('occurrenceDate');
         dateInput.min = this.formatDateTimeLocal(new Date(habit.startDate));
         dateInput.max = this.formatDateTimeLocal(new Date());
-        
         document.getElementById('occurrenceModal').classList.add('active');
-
         this.updateOccurrencesList(habitId);
     }
 
@@ -512,34 +559,26 @@ class HabitTracker {
             delete confirmBtn.dataset.occurrenceId;
         }
     }
+
     updateOccurrencesList(habitId) {
         const habit = this.habits.find(h => h.id === habitId);
         const container = document.getElementById('existingOccurrences');
-        
         if (!habit || !container) return;
-        
+
         if (habit.occurrences.length === 0) {
             container.innerHTML = '<p class="no-occurrences">No occurrences recorded yet.</p>';
             return;
         }
-        
-        const habitOccurences = habit.occurrences;
-        
-        container.innerHTML = habitOccurences.map(occurrence => {
+
+        container.innerHTML = habit.occurrences.map(occurrence => {
             const date = new Date(occurrence.date);
-            const formattedDate = date.toLocaleDateString('en-US', { 
-                month: 'short', 
-                day: 'numeric',
-                hour: '2-digit', 
-                minute: '2-digit'
+            const formattedDate = date.toLocaleDateString('en-US', {
+                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
             });
-            
-            const noteDisplay = occurrence.notes ? 
-                (occurrence.notes.length > 30 ? 
-                    occurrence.notes.substring(0, 30) + '...' : 
-                    occurrence.notes) : 
-                '';
-            
+            const noteDisplay = occurrence.notes
+                ? (occurrence.notes.length > 30 ? occurrence.notes.substring(0, 30) + '...' : occurrence.notes)
+                : '';
+
             return `
                 <div class="occurrence-item">
                     <div class="occurrence-info">
@@ -547,10 +586,7 @@ class HabitTracker {
                         ${noteDisplay ? `<div class="occurrence-note">${this.escapeHtml(noteDisplay)}</div>` : ''}
                     </div>
                     <div class="occurrence-actions">
-                        <button class="icon-btn delete" title="Delete Occurrence" 
-                                onclick="tracker.openDeleteOccurrenceModal('${habitId}', '${occurrence.id}')">
-                            🗑️
-                        </button>
+                        <button class="icon-btn delete" title="Delete" onclick="tracker.openDeleteOccurrenceModal('${habitId}', '${occurrence.id}')">🗑️</button>
                     </div>
                 </div>
             `;
@@ -570,15 +606,13 @@ class HabitTracker {
     openBadgesModal(habitId) {
         const habit = this.habits.find(h => h.id === habitId);
         if (!habit) return;
-        
         const modal = document.getElementById('badgesModal');
-        if (!modal) return; // Modal not yet in HTML
-        
+        if (!modal) return;
+
         const habitNameEl = document.getElementById('badgeHabitName');
         const badgesListEl = document.getElementById('badgesList');
-        
         if (habitNameEl) habitNameEl.textContent = habit.name;
-        
+
         if (badgesListEl) {
             if (habit.earnedBadges.length === 0) {
                 badgesListEl.innerHTML = '<p class="no-badges">No badges earned yet. Keep going!</p>';
@@ -591,15 +625,12 @@ class HabitTracker {
                 `).join('');
             }
         }
-        
         modal.classList.add('active');
     }
 
     closeBadgesModal() {
         const modal = document.getElementById('badgesModal');
-        if (modal) {
-            modal.classList.remove('active');
-        }
+        if (modal) modal.classList.remove('active');
     }
 
     closeAllModals() {
@@ -615,15 +646,14 @@ class HabitTracker {
         e.preventDefault();
         const name = document.getElementById('habitName').value.trim();
         const startDate = document.getElementById('startDate').value;
-        
+        const category = document.getElementById('habitCategory').value;
         if (!name || !startDate) return;
-        
+
         if (this.currentEditId) {
-            this.updateHabit(this.currentEditId, name, startDate);
+            this.updateHabit(this.currentEditId, name, startDate, category);
         } else {
-            this.addHabit(name, startDate);
+            this.addHabit(name, startDate, category);
         }
-        
         this.closeHabitModal();
     }
 
@@ -632,9 +662,7 @@ class HabitTracker {
         const habitId = document.getElementById('occurrenceHabitId').value;
         const date = document.getElementById('occurrenceDate').value;
         const notes = document.getElementById('occurrenceNotes').value.trim();
-        
         if (!habitId || !date) return;
-        
         this.addOccurrence(habitId, date, notes);
         this.closeOccurrenceModal();
     }
@@ -654,26 +682,21 @@ class HabitTracker {
         }
     }
 
-    // Utility Methods
+    // Utility
     formatDateTimeLocal(date) {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         const hours = String(date.getHours()).padStart(2, '0');
         const minutes = String(date.getMinutes()).padStart(2, '0');
-        
         return `${year}-${month}-${day}T${hours}:${minutes}`;
     }
 
     formatBadgeDate(date) {
-        const options = { 
-            year: 'numeric', 
-            month: 'short', 
-            day: 'numeric', 
-            hour: '2-digit', 
-            minute: '2-digit' 
-        };
-        return date.toLocaleDateString('en-US', options);
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        });
     }
 
     escapeHtml(text) {
@@ -685,85 +708,59 @@ class HabitTracker {
     showMotivationalMessage() {
         const messageEl = document.getElementById('motivationalMessage');
         const messageText = document.getElementById('messageText');
-        
         const randomMessage = this.motivationalMessages[
             Math.floor(Math.random() * this.motivationalMessages.length)
         ];
-        
         messageText.textContent = randomMessage;
         messageEl.classList.add('show');
-        
-        setTimeout(() => {
-            messageEl.classList.remove('show');
-        }, 3000);
+        setTimeout(() => messageEl.classList.remove('show'), 3000);
     }
 
     startStreakUpdater() {
-        // Update streaks every minute
         setInterval(() => {
-            // Recalculate badges in case any new ones were earned
             this.habits.forEach(habit => {
                 const previousBadgeCount = habit.earnedBadges.length;
                 this.updateStreakAndBadges(habit);
-                
-                // If new badges were earned, show motivational message
                 if (habit.earnedBadges.length > previousBadgeCount) {
                     this.showMotivationalMessage();
                 }
             });
-            
             this.saveToStorage();
             this.render();
+            this.updateStats();
         }, 60000);
     }
-    
+
     triggerImport() {
         const importFile = document.getElementById('importFile');
-        if (importFile) {
-            importFile.click();
-        }
+        if (importFile) importFile.click();
     }
 
     handleImport(event) {
         const file = event.target.files[0];
         if (!file) return;
-
         const reader = new FileReader();
         reader.onload = (e) => {
             const result = this.importData(e.target.result, 'replace');
-            
-            if (result.success) {
-                this.showMotivationalMessage();
-            }
-            
-            // Reset file input
+            if (result.success) this.showMotivationalMessage();
             event.target.value = '';
         };
-        
         reader.readAsText(file);
     }
 
     exportData() {
         const exportData = {
-            version: '1.0',
+            version: '2.0',
             exportDate: new Date().toISOString(),
             habits: this.habits
         };
-        
         const filename = `habit-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
         const dataStr = JSON.stringify(exportData, null, 2);
-        
-        // Execute download immediately to preserve user gesture
-        this.dataUrlDownload(dataStr, filename);
-    }
-
-    dataUrlDownload(dataStr, filename) {
         const dataUrl = "data:text/json;charset=utf-8," + encodeURIComponent(dataStr);
         const link = document.createElement('a');
         link.href = dataUrl;
         link.download = filename;
         link.style.display = 'none';
-        
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -774,76 +771,49 @@ class HabitTracker {
     }
 
     importData(fileContent, mode = 'replace') {
+        let currentBackup;
         try {
             const importData = JSON.parse(fileContent);
-            
             if (!importData.habits || !Array.isArray(importData.habits)) {
                 throw new Error('Invalid backup file format');
             }
+            currentBackup = [...this.habits];
+            if (mode === 'replace') this.habits = [];
 
-            // Backup current data before import
-            const currentBackup = [...this.habits];
-            
-            if (mode === 'replace') {
-                this.habits = [];
-            }
-
-            // Process imported habits with ID conflict resolution
             const importedHabits = importData.habits.map(habit => {
                 const newHabit = { ...habit };
-                
-                // Generate new IDs to prevent conflicts
-                const oldId = newHabit.id;
                 newHabit.id = this.generateUniqueId();
-                
-                // Update occurrence IDs and ensure they're valid
+                if (!newHabit.category) newHabit.category = 'other';
                 if (newHabit.occurrences && Array.isArray(newHabit.occurrences)) {
                     newHabit.occurrences = newHabit.occurrences.map(occ => ({
-                        ...occ,
-                        id: this.generateUniqueId()
+                        ...occ, id: this.generateUniqueId()
                     }));
                 } else {
                     newHabit.occurrences = [];
                 }
-
-                // Ensure required fields exist
-                if (!newHabit.currentStreakStart) {
-                    newHabit.currentStreakStart = newHabit.startDate;
-                }
-                if (!newHabit.earnedBadges) {
-                    newHabit.earnedBadges = [];
-                }
-
+                if (!newHabit.currentStreakStart) newHabit.currentStreakStart = newHabit.startDate;
+                if (!newHabit.earnedBadges) newHabit.earnedBadges = [];
                 return newHabit;
             });
 
-            // Add imported habits
             this.habits.push(...importedHabits);
-
-            // Recalculate all streaks and badges
-            this.habits.forEach(habit => {
-                this.updateStreakAndBadges(habit);
-            });
-
+            this.habits.forEach(habit => this.updateStreakAndBadges(habit));
             this.saveToStorage();
             this.render();
-            
+            this.updateStats();
             return { success: true, importedCount: importedHabits.length };
-            
         } catch (error) {
-            // Restore backup on failure
             if (currentBackup) {
                 this.habits = currentBackup;
                 this.saveToStorage();
                 this.render();
+                this.updateStats();
             }
-            
             return { success: false, error: error.message };
         }
     }
 }
 
-// Initialize the app when DOM is loaded
 let tracker;
 document.addEventListener('DOMContentLoaded', () => {
     tracker = new HabitTracker();

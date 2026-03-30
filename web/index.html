@@ -5,27 +5,65 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Habit Tracker</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0a0a0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body>
     <div class="container">
+        <!-- Stats Dashboard -->
         <header>
             <h1>Habit Tracker</h1>
-            <p class="tagline">"To live is to suffer, to survive is to find some meaning in the suffering."</p>
+            <p class="tagline">Build better habits, one day at a time</p>
         </header>
 
-                <!-- Backup/Restore Section -->
+        <div class="stats-dashboard">
+            <div class="stat-card">
+                <div class="stat-icon">🎯</div>
+                <div class="stat-value" id="totalHabits">0</div>
+                <div class="stat-label">Active Habits</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🔥</div>
+                <div class="stat-value" id="totalStreak">0d</div>
+                <div class="stat-label">Best Streak</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🏅</div>
+                <div class="stat-value" id="totalBadges">0</div>
+                <div class="stat-label">Badges Earned</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-value" id="totalOccurrences">0</div>
+                <div class="stat-label">Total Logs</div>
+            </div>
+        </div>
+
+        <!-- Category Filter -->
+        <div class="category-filter">
+            <button class="filter-btn active" data-category="all">All</button>
+            <button class="filter-btn" data-category="health">💪 Health</button>
+            <button class="filter-btn" data-category="productivity">⚡ Productivity</button>
+            <button class="filter-btn" data-category="mindfulness">🧘 Mindfulness</button>
+            <button class="filter-btn" data-category="finance">💰 Finance</button>
+            <button class="filter-btn" data-category="other">📌 Other</button>
+        </div>
+
+        <!-- Backup/Restore Section -->
         <div class="backup-restore-section">
             <button id="exportBtn" class="backup-btn">
                 <span class="icon">📤</span>
-                <span>Export Data</span>
+                <span>Export</span>
             </button>
             <button id="importBtn" class="backup-btn">
                 <span class="icon">📥</span>
-                <span>Import Data</span>
+                <span>Import</span>
             </button>
             <input type="file" id="importFile" accept=".json" style="display: none;">
         </div>
-        
+
         <main>
             <!-- Add New Habit Button -->
             <div class="add-habit-section">
@@ -52,7 +90,17 @@
                     <input type="hidden" id="habitId">
                     <div class="form-group">
                         <label for="habitName">Habit Name:</label>
-                        <input type="text" id="habitName" placeholder="e.g., Stop Eating Junk Food" required>
+                        <input type="text" id="habitName" placeholder="e.g., Exercise daily, Read 30 min" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="habitCategory">Category:</label>
+                        <select id="habitCategory">
+                            <option value="health">💪 Health</option>
+                            <option value="productivity">⚡ Productivity</option>
+                            <option value="mindfulness">🧘 Mindfulness</option>
+                            <option value="finance">💰 Finance</option>
+                            <option value="other">📌 Other</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label for="startDate">Start Date:</label>
@@ -88,7 +136,7 @@
                         <button type="button" class="btn btn-secondary" id="cancelOccurrenceBtn">Cancel</button>
                     </div>
                 </form>
-                
+
                 <!-- Existing Occurrences Section -->
                 <div class="modal-separator"></div>
                 <div class="occurrences-section">
