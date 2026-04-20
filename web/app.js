@@ -122,8 +122,14 @@ class HabitTracker {
     // Storage
     loadFromStorage() {
         const stored = localStorage.getItem('habitTrackerHabits');
-        if (stored) {
-            this.habits = JSON.parse(stored);
+        if (!stored) return;
+        try {
+            const parsed = JSON.parse(stored);
+            this.habits = Array.isArray(parsed) ? parsed : [];
+        } catch (err) {
+            console.error('habitTrackerHabits bozuk, yedekleniyor:', err);
+            localStorage.setItem('habitTrackerHabits_corrupted_' + Date.now(), stored);
+            this.habits = [];
         }
     }
 
@@ -371,18 +377,27 @@ class HabitTracker {
         let bestStreak = 0;
         let totalBadges = 0;
         let totalOccurrences = 0;
+        let thisWeekCount = 0;
+
+        const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
 
         this.habits.forEach(habit => {
             const longest = this.calculateLongestStreak(habit);
             if (longest > bestStreak) bestStreak = longest;
             totalBadges += habit.earnedBadges.length;
             totalOccurrences += habit.occurrences.length;
+
+            const recentOccurrences = habit.occurrences.filter(
+                occ => new Date(occ.date).getTime() >= sevenDaysAgo
+            );
+            thisWeekCount += recentOccurrences.length;
         });
 
         document.getElementById('totalStreak').textContent = bestStreak > 0
             ? this.formatDurationShort(bestStreak) : '0d';
         document.getElementById('totalBadges').textContent = totalBadges;
         document.getElementById('totalOccurrences').textContent = totalOccurrences;
+        document.getElementById('thisWeekCount').textContent = thisWeekCount;
     }
 
     // Rendering
